@@ -10,6 +10,10 @@
 #include "i2s_dma/i2s_dma.h"
 #include <udplogger.h>
 
+#ifndef VERSION
+ #error You must set VERSION=x.y.z to match github version tag x.y.z
+#endif
+
 #define  TRIGGER_PIN 2
 #define  ONES  0xffffffff // 32 bits of value one
 #define  ZEROS 0x00000000 // 32 bits of value zero
@@ -65,6 +69,8 @@ void spike_task(void *argv) {
 
 void user_init(void) {
     uart_set_baud(0, 115200);
+    udplog_init(3);
+    UDPLUS("\n\n\nWaterMeter " VERSION "\n");
     gpio_enable( TRIGGER_PIN, GPIO_OUTPUT); gpio_write( TRIGGER_PIN, 1);
     xTaskCreate(spike_task, "Spike", 512, NULL, 1, NULL);
 }

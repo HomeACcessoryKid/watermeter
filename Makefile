@@ -6,6 +6,10 @@ EXTRA_COMPONENTS = \
 
 FLASH_SIZE ?= 8
 
+ifdef VERSION
+EXTRA_CFLAGS += -DVERSION=\"$(VERSION)\"
+endif
+
 EXTRA_CFLAGS += -DUDPLOG_PRINTF_TO_UDP
 
 include $(SDK_PATH)/common.mk
