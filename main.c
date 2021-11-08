@@ -34,14 +34,13 @@ void spike_task(void *argv) {
     dma_block.next_link_ptr = 0; dma_block.eof = 1; //only one block with EOF so will be a single shot
     dma_block.datalen = BUFSIZE*4; dma_block.blocksize = BUFSIZE*4; // uint32_t is 4byte data x BUFSIZE words
     dma_block.buf_ptr = dma_buf;
-    dma_buf[0]=ONES; dma_buf[1]=ONES;dma_buf[2]=~(ONES>>19); //83 bits gets us 321 kHz
+    dma_buf[0]=ONES; dma_buf[1]=ONES;dma_buf[2]=~(ONES>>19); //83 bits (32+32+19) gets us 321 kHz
     dma_buf[3]=ZEROS;dma_buf[4]=ZEROS;dma_buf[5]=ONES>>6; // we generate 3 pulses of 1.56 microseconds
     dma_buf[6]=ONES;dma_buf[7]=~(ONES>>25);dma_buf[8]=ZEROS;dma_buf[9]=ZEROS;
     dma_buf[10]=ONES>>12;dma_buf[11]=ONES;dma_buf[12]=~(ONES>>31);
     dma_buf[13]=ZEROS;dma_buf[14]=ZEROS;dma_buf[15]=ZEROS; //need to fill multiple of 4 32 bits words, so 16
-    while (1) {
-        printf("base %4d   ",sdk_system_adc_read());fflush(stdout);
-        //because GPIO3=I2S output is LOW in rest between shots, we must generate a HIGH pulse.
+    while (1) { //because GPIO3=I2S output is LOW in rest between shots, we must generate a HIGH pulse.
+        printf("base1 %4d   ",sdk_system_adc_read());fflush(stdout);
         gpio_write(COIL1_PIN, 0); //enable COIL1
         sdk_os_delay_us(20); //stabilise the output?
         i2s_dma_start(&dma_block); //transmit the dma_buf once
@@ -51,6 +50,7 @@ void spike_task(void *argv) {
         
         vTaskDelay(25); //250ms
         
+        printf("base2 %4d   ",sdk_system_adc_read());fflush(stdout);
         gpio_write(COIL2_PIN, 0); //enable COIL2
         sdk_os_delay_us(20); //stabilise the output?
         i2s_dma_start(&dma_block); //transmit the dma_buf once
@@ -64,9 +64,9 @@ void spike_task(void *argv) {
 
 void user_init(void) {
     uart_set_baud(0, 115200);
-    udplog_init(3);
+    udplog_init(2);
     UDPLUS("\n\n\nWaterMeter " VERSION "\n");
     gpio_enable( COIL1_PIN, GPIO_OUTPUT); gpio_write( COIL1_PIN, 1);
     gpio_enable( COIL2_PIN, GPIO_OUTPUT); gpio_write( COIL2_PIN, 1);
-    xTaskCreate(spike_task, "Spike", 512, NULL, 1, NULL);
+    xTaskCreate(spike_task, "Spike", 512, NULL, 3, NULL);
 }
