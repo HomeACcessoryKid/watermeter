@@ -26,6 +26,7 @@ uint32_t dma_buf[BUFSIZE];
 static   dma_descriptor_t dma_block;
 
 void spike_task(void *argv) {
+    uint32_t timestamp;
     //SPIKE_PIN is GPIO3 = RX0 because hardcoded in i2s - remove UART cable from RX0 port!
     i2s_pins_t i2s_pins = {.data = true, .clock = false, .ws = false};
     i2s_clock_div_t clock_div = i2s_get_clock_div(53333333); // 53MHz provides div=3 and 0.01875 microseconds per step
@@ -43,9 +44,12 @@ void spike_task(void *argv) {
         printf("base1 %4d   ",sdk_system_adc_read());fflush(stdout);
         gpio_write(COIL1_PIN, 0); //enable COIL1
         sdk_os_delay_us(20); //stabilise the output?
+        timestamp=sdk_system_get_time();
         i2s_dma_start(&dma_block); //transmit the dma_buf once
-        sdk_os_delay_us(60);
-        printf("C1 %4d   ",sdk_system_adc_read());fflush(stdout);
+//         sdk_os_delay_us(60);
+//         printf("C1 %4d   ",sdk_system_adc_read());fflush(stdout);
+        for (int i=0;i<50;i++) printf("%4d\n",sdk_system_adc_read());
+        printf("time %d\n\n",sdk_system_get_time()-timestamp);
         gpio_write(COIL1_PIN, 1); //disable COIL1
         
         vTaskDelay(25); //250ms
@@ -53,9 +57,12 @@ void spike_task(void *argv) {
         printf("base2 %4d   ",sdk_system_adc_read());fflush(stdout);
         gpio_write(COIL2_PIN, 0); //enable COIL2
         sdk_os_delay_us(20); //stabilise the output?
+        timestamp=sdk_system_get_time();
         i2s_dma_start(&dma_block); //transmit the dma_buf once
-        sdk_os_delay_us(60);
-        printf("C2 %4d\n",sdk_system_adc_read());
+//         sdk_os_delay_us(60);
+//         printf("C2 %4d\n",sdk_system_adc_read());
+        for (int i=0;i<50;i++) printf("%4d\n",sdk_system_adc_read());
+        printf("time %d\n\n",sdk_system_get_time()-timestamp);
         gpio_write(COIL2_PIN, 1); //disable COIL2
         
         vTaskDelay(25); //250ms
