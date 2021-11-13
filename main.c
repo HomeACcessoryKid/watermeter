@@ -21,11 +21,13 @@
 //DETECT_PIN is ADC
 #define  ONES  0xffffffff // 32 bits of value one
 #define  ZEROS 0x00000000 // 32 bits of value zero
-#define  BUFSIZE 16       // must be multiple of 4
+#define  PRE_BUF 80       // must be multiple of 4 at 0.6 microseconds per unit
+#define  BUFSIZE 16+PRE_BUF // must be multiple of 4
 uint32_t dma_buf[BUFSIZE];
 static   dma_descriptor_t dma_block;
 
 void spike_task(void *argv) {
+    int i;
     //SPIKE_PIN is GPIO3 = RX0 because hardcoded in i2s - remove UART cable from RX0 port!
     i2s_pins_t i2s_pins = {.data = true, .clock = false, .ws = false};
     i2s_clock_div_t clock_div = i2s_get_clock_div(53333333); // 53MHz provides div=3 and 0.01875 microseconds per step
@@ -34,13 +36,14 @@ void spike_task(void *argv) {
     dma_block.next_link_ptr = 0; dma_block.eof = 1; //only one block with EOF so will be a single shot
     dma_block.datalen = BUFSIZE*4; dma_block.blocksize = BUFSIZE*4; // uint32_t is 4byte data x BUFSIZE words
     dma_block.buf_ptr = dma_buf;
-    dma_buf[0]=ONES; dma_buf[1]=ONES;dma_buf[2]=~(ONES>>19); //83 bits (32+32+19) gets us 321 kHz
-    dma_buf[3]=ZEROS;dma_buf[4]=ZEROS;dma_buf[5]=ONES>>6; // we generate 3 pulses of 1.56 microseconds
-    dma_buf[6]=ONES;dma_buf[7]=~(ONES>>25);dma_buf[8]=ZEROS;dma_buf[9]=ZEROS;
-    dma_buf[10]=ONES>>12;dma_buf[11]=ONES;dma_buf[12]=~(ONES>>31);
-    dma_buf[13]=ZEROS;dma_buf[14]=ZEROS;dma_buf[15]=ZEROS; //need to fill multiple of 4 32 bits words, so 16
+    for (i=0;i<PRE_BUF;i++) dma_buf[i]=ZEROS;
+    dma_buf[i++]=ONES; dma_buf[i++]=ONES;dma_buf[i++]=~(ONES>>19); //83 bits (32+32+19) gets us 321 kHz
+    dma_buf[i++]=ZEROS;dma_buf[i++]=ZEROS;dma_buf[i++]=ONES>>6; // we generate 3 pulses of 1.56 microseconds
+    dma_buf[i++]=ONES;dma_buf[i++]=~(ONES>>25);dma_buf[i++]=ZEROS;dma_buf[i++]=ZEROS;
+    dma_buf[i++]=ONES>>12;dma_buf[i++]=ONES;dma_buf[i++]=~(ONES>>31);
+    dma_buf[i++]=ZEROS;dma_buf[i++]=ZEROS;dma_buf[i++]=ZEROS; //need to fill multiple of 4 32 bits words, so 16
     while (1) { //because GPIO3=I2S output is LOW in rest between shots, we must generate a HIGH pulse.
-        for (int i=1;i<100;i++) {
+        for (i=1;i<100;i++) {
             printf("%2d  ",i);fflush(stdout);
 //             printf("base1 %4d   ",sdk_system_adc_read());fflush(stdout);
             gpio_write(COIL1_PIN, 0); //enable COIL1
