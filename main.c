@@ -27,7 +27,7 @@ static   dma_descriptor_t dma_block;
 
 void spike_task(void *argv) {
     int i=0;
-    uint16_t reading1,reading2;
+    uint16_t reading1,reading2,base1,base2;
     //SPIKE_PIN is GPIO3 = RX0 because hardcoded in i2s - remove UART cable from RX0 port!
     i2s_pins_t i2s_pins = {.data = true, .clock = false, .ws = false};
     i2s_clock_div_t clock_div = i2s_get_clock_div(53333333); // 53MHz provides div=3 and 0.01875 microseconds per step
@@ -42,6 +42,8 @@ void spike_task(void *argv) {
     dma_buf[i++]=ONES>>12;dma_buf[i++]=ONES;dma_buf[i++]=~(ONES>>31);
     dma_buf[i++]=ZEROS;dma_buf[i++]=ZEROS;dma_buf[i++]=ZEROS; //need to fill multiple of 4 32 bits words, so 16
     while (1) { //because GPIO3=I2S output is LOW in rest between shots, we must generate a HIGH pulse.
+      for (i=1;i<25;i++) {
+        base1=sdk_system_adc_read();
         gpio_write(COIL1_PIN, 0); //enable COIL1
         sdk_os_delay_us(20); //stabilise the output?
         i2s_dma_start(&dma_block); //transmit the dma_buf once
@@ -49,16 +51,18 @@ void spike_task(void *argv) {
         sdk_os_delay_us(200); //stabilise the output?
         gpio_write(COIL1_PIN, 1); //disable COIL1
     
-        vTaskDelay(25); //250ms
+        vTaskDelay(i);
     
+        base2=sdk_system_adc_read();
         gpio_write(COIL2_PIN, 0); //enable COIL2
         sdk_os_delay_us(20); //stabilise the output?
         i2s_dma_start(&dma_block); //transmit the dma_buf once
         reading2=sdk_system_adc_read();
         sdk_os_delay_us(200); //stabilise the output?
         gpio_write(COIL2_PIN, 1); //disable COIL2
-        printf("C1 %4d C2 %4d\n",reading1,reading2);
-        vTaskDelay(25); //250ms
+        printf("%2d %3d %3d %3d %3d\n",i,base1,base2,reading1,reading2);
+        vTaskDelay(i);
+      }
     }
 }
 
