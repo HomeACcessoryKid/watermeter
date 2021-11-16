@@ -23,14 +23,14 @@
 #define  ZEROS 0x00000000 // 32 bits of value zero
 #define  BUFSIZE 16       // must be multiple of 4
 #define  WINDOW  20       // minimum value of # of samples
-#define  OFFSET  10       // how much coil2 is higher than coil1
-#define  HYSTERESIS  10       // how much coil2 is higher than coil1
+#define  OFFSET  -8       // how much coil1 is higher than coil2
+#define  HYSTERESIS  10   // to prevent noise to trigger
 uint32_t dma_buf[BUFSIZE];
 static   dma_descriptor_t dma_block;
 
 void spike_task(void *argv) {
     int i=0;
-    int direction=1;
+    bool direction=0;
     uint32_t halflitres=0;
     uint16_t reading1,reading2;
     uint16_t min1,min2;
@@ -69,12 +69,12 @@ void spike_task(void *argv) {
             if (min2>reading2) min2=reading2;
             vTaskDelay(1); // 10ms
         }
-        if (direction>0) {
-            if ((min1-min2-OFFSET)>direction*HYSTERESIS) { halflitres++; direction=-1; }
+        if (direction) {
+            if ((min1-min2)>OFFSET+HYSTERESIS) { halflitres++; direction=0; }
         } else {
-            if ((min1-min2-OFFSET)<direction*HYSTERESIS) { halflitres++; direction= 1; }
+            if ((min1-min2)<OFFSET-HYSTERESIS) { halflitres++; direction=1; }
         }
-        printf("%6d %3d %3d %d %6.1f\n",sdk_system_get_time()/1000,min1,min2,direction,halflitres/2.0);
+        printf("%d %6d %3d %3d %3.1f\n",direction,sdk_system_get_time()/1000,min1,min2,halflitres/2.0);
     }
 }
 
