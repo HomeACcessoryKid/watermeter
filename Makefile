@@ -1,6 +1,7 @@
 PROGRAM = main
 
 EXTRA_COMPONENTS = \
+	extras/timekeeping \
     extras/i2s_dma \
     $(abspath UDPlogger) \
 

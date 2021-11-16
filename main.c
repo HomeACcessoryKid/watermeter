@@ -10,6 +10,7 @@
 #include <string.h>
 #include "i2s_dma/i2s_dma.h"
 #include <udplogger.h>
+#include <lwip/apps/sntp.h>
 
 #ifndef VERSION
  #error You must set VERSION=x.y.z to match github version tag x.y.z
@@ -27,6 +28,7 @@
 #define  HYSTERESIS  10   // to prevent noise to trigger
 uint32_t dma_buf[BUFSIZE];
 static   dma_descriptor_t dma_block;
+time_t ts;
 
 void spike_task(void *argv) {
     int i=0;
@@ -70,13 +72,45 @@ void spike_task(void *argv) {
             vTaskDelay(1); // 10ms
         }
         if (direction) {
-            if ((min1-min2)>OFFSET+HYSTERESIS) { halflitres++; direction=0; }
+            if ((min1-min2)>OFFSET+HYSTERESIS) {
+                halflitres++;
+                direction=0;
+                ts = time(NULL);
+                printf("%3.1f litres at %s",halflitres/2.0,ctime(&ts));
+            }
         } else {
-            if ((min1-min2)<OFFSET-HYSTERESIS) { halflitres++; direction=1; }
+            if ((min1-min2)<OFFSET-HYSTERESIS) {
+                halflitres++;
+                direction=1;
+                ts = time(NULL);
+                printf("%3.1f litres at %s",halflitres/2.0,ctime(&ts));
+            }
         }
         printf("%d %6d %3d %3d %3.1f\n",direction,sdk_system_get_time()/1000,min1,min2,halflitres/2.0);
     }
 }
+
+void sntp_task(void *argv) {
+    setenv("TZ", "CET-1CEST,M3.5.0/2,M10.5.0/3", 1); tzset();
+    sntp_setoperatingmode(SNTP_OPMODE_POLL);
+    sntp_setservername(0, "0.pool.ntp.org");
+    sntp_setservername(1, "1.pool.ntp.org");
+    sntp_setservername(2, "2.pool.ntp.org");
+    while (sdk_wifi_station_get_connect_status() != STATION_GOT_IP) vTaskDelay(200/portTICK_PERIOD_MS); //Check if we have an IP every 200ms
+    sntp_init();
+    do {ts = time(NULL);
+        if (ts == ((time_t)-1)) printf("ts=-1 ");
+        vTaskDelay(100/portTICK_PERIOD_MS);
+    } while (!(ts>1634567890)); //Mon Oct 18 16:38:10 CEST 2021
+    printf("TIME SET: %u=%s", (unsigned int) ts, ctime(&ts));
+    while(1) {
+        vTaskDelay(6000); //60s
+        ts = time(NULL);
+        printf("TIME: %s", ctime(&ts));
+    }
+    vTaskDelete(NULL);
+}
+
 
 void user_init(void) {
     uart_set_baud(0, 115200);
@@ -85,4 +119,5 @@ void user_init(void) {
     gpio_enable( COIL1_PIN, GPIO_OUTPUT); gpio_write( COIL1_PIN, 1);
     gpio_enable( COIL2_PIN, GPIO_OUTPUT); gpio_write( COIL2_PIN, 1);
     xTaskCreate(spike_task, "Spike", 512, NULL, 3, NULL);
+    xTaskCreate( sntp_task, "SNTP" , 512, NULL, 1, NULL);
 }
