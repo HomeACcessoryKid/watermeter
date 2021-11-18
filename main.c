@@ -25,7 +25,7 @@
 #define  BUFSIZE 16       // must be multiple of 4
 #define  WINDOW  20       // minimum value of # of samples
 #define  OFFSET  -8       // how much coil1 is higher than coil2
-#define  HYSTERESIS  10   // to prevent noise to trigger
+#define  HYSTERESIS  15   // to prevent noise to trigger
 uint32_t dma_buf[BUFSIZE];
 static   dma_descriptor_t dma_block;
 time_t ts;
