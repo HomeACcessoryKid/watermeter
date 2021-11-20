@@ -23,7 +23,7 @@
 #define  ONES  0xffffffff // 32 bits of value one
 #define  ZEROS 0x00000000 // 32 bits of value zero
 #define  BUFSIZE 16       // must be multiple of 4
-#define  WINDOW 100       // minimum value of # of samples
+#define  WINDOW  20       // minimum value of # of samples
 #define  OFFSET  -8       // how much coil1 is higher than coil2
 #define  HYSTERESIS  15   // to prevent noise to trigger
 uint32_t dma_buf[BUFSIZE];
@@ -34,8 +34,7 @@ void spike_task(void *argv) {
     int i=0;
     bool direction=2;
     uint32_t halflitres=0;
-    uint16_t reading1,reading2;
-    uint16_t min1,min2;
+    uint16_t reading,min1,min2,min1x,min2x; // x is for eXtreme which we will ignore
     
     //SPIKE_PIN is GPIO3 = RX0 because hardcoded in i2s - remove UART cable from RX0 port!
     i2s_pins_t i2s_pins = {.data = true, .clock = false, .ws = false};
@@ -51,24 +50,24 @@ void spike_task(void *argv) {
     dma_buf[i++]=ONES>>12;dma_buf[i++]=ONES;dma_buf[i++]=~(ONES>>31);
     dma_buf[i++]=ZEROS;dma_buf[i++]=ZEROS;dma_buf[i++]=ZEROS; //need to fill multiple of 4 32 bits words, so 16
     while (1) { //because GPIO3=I2S output is LOW in rest between shots, we must generate a HIGH pulse.
-        min1=1023;min2=1023;
+        min1=1024;min2=1024;min1x=1024;min2x=1024;
         for (i=0;i<WINDOW;i++) {
             gpio_write(COIL1_PIN, 0); //enable COIL1
             sdk_os_delay_us(20); //stabilise the output?
             i2s_dma_start(&dma_block); //transmit the dma_buf once
-            reading1=sdk_system_adc_read();
+            reading=sdk_system_adc_read();
             sdk_os_delay_us(200); //stabilise the output?
             gpio_write(COIL1_PIN, 1); //disable COIL1
-            if (min1>reading1) min1=reading1;
+            if (min1x>reading) {min1=min1x; min1x=reading;} else if (min1>reading) min1=reading;
             vTaskDelay(1); // 10ms
     
             gpio_write(COIL2_PIN, 0); //enable COIL2
             sdk_os_delay_us(20); //stabilise the output?
             i2s_dma_start(&dma_block); //transmit the dma_buf once
-            reading2=sdk_system_adc_read();
+            reading=sdk_system_adc_read();
             sdk_os_delay_us(200); //stabilise the output?
             gpio_write(COIL2_PIN, 1); //disable COIL2
-            if (min2>reading2) min2=reading2;
+            if (min2x>reading) {min2=min2x; min2x=reading;} else if (min2>reading) min2=reading;
             vTaskDelay(1); // 10ms
         }
         if (direction) {
@@ -86,7 +85,7 @@ void spike_task(void *argv) {
                 printf("%3.1f litres at %s",halflitres/2.0,ctime(&ts));
             }
         }
-        printf("%d %d %d %d %d %3.1f\n",direction,sdk_system_get_time()/1000,min1,min2,min1-min2-OFFSET,halflitres/2.0);
+        printf("%d %d %d %d %d %d %d %3.1f\n",direction,sdk_system_get_time()/1000,min1x,min2x,min1,min2,min1-min2-OFFSET,halflitres/2.0);
     }
 }
 
