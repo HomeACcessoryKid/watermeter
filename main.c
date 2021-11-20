@@ -86,7 +86,7 @@ void spike_task(void *argv) {
                 printf("%3.1f litres at %s",halflitres/2.0,ctime(&ts));
             }
         }
-        printf("%d %6d %3d %3d %3.1f\n",direction,sdk_system_get_time()/1000,min1,min2,halflitres/2.0);
+        printf("%d %d %d %d %d %3.1f\n",direction,sdk_system_get_time()/1000,min1,min2,min1-min2-OFFSET,halflitres/2.0);
     }
 }
 
