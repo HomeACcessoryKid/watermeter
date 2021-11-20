@@ -32,9 +32,9 @@ time_t ts;
 
 void spike_task(void *argv) {
     int i=0;
-    bool direction=2;
+    bool direction=0;
     uint32_t halflitres=0;
-    uint16_t reading,min1,min2,min1x,min2x; // x is for eXtreme which we will ignore
+    uint16_t reading,min1,min2,min1x,min2x,min1xx,min2xx; // x is for eXtreme which we will ignore
     
     //SPIKE_PIN is GPIO3 = RX0 because hardcoded in i2s - remove UART cable from RX0 port!
     i2s_pins_t i2s_pins = {.data = true, .clock = false, .ws = false};
@@ -50,7 +50,7 @@ void spike_task(void *argv) {
     dma_buf[i++]=ONES>>12;dma_buf[i++]=ONES;dma_buf[i++]=~(ONES>>31);
     dma_buf[i++]=ZEROS;dma_buf[i++]=ZEROS;dma_buf[i++]=ZEROS; //need to fill multiple of 4 32 bits words, so 16
     while (1) { //because GPIO3=I2S output is LOW in rest between shots, we must generate a HIGH pulse.
-        min1=1024;min2=1024;min1x=1024;min2x=1024;
+        min1=1024;min2=1024;min1x=1024;min2x=1024;min1xx=1024;min2xx=1024;
         for (i=0;i<WINDOW;i++) {
             gpio_write(COIL1_PIN, 0); //enable COIL1
             sdk_os_delay_us(20); //stabilise the output?
@@ -58,7 +58,7 @@ void spike_task(void *argv) {
             reading=sdk_system_adc_read();
             sdk_os_delay_us(200); //stabilise the output?
             gpio_write(COIL1_PIN, 1); //disable COIL1
-            if (min1x>reading) {min1=min1x; min1x=reading;} else if (min1>reading) min1=reading;
+            if (min1xx>reading) {min1=min1x; min1x=min1xx; min1xx=reading;} else if (min1x>reading) {min1=min1x; min1x=reading;} else if (min1>reading) min1=reading;
             vTaskDelay(1); // 10ms
     
             gpio_write(COIL2_PIN, 0); //enable COIL2
@@ -67,12 +67,12 @@ void spike_task(void *argv) {
             reading=sdk_system_adc_read();
             sdk_os_delay_us(200); //stabilise the output?
             gpio_write(COIL2_PIN, 1); //disable COIL2
-            if (min2x>reading) {min2=min2x; min2x=reading;} else if (min2>reading) min2=reading;
+            if (min2xx>reading) {min2=min2x; min2x=min2xx; min2xx=reading;} else if (min2x>reading) {min2=min2x; min2x=reading;} else if (min2>reading) min2=reading;
             vTaskDelay(1); // 10ms
         }
         if (direction) {
             if ((min1-min2)>OFFSET+HYSTERESIS) {
-                if (direction==1) halflitres++;
+                halflitres++;
                 direction=0;
                 ts = time(NULL);
                 printf("%3.1f litres at %s",halflitres/2.0,ctime(&ts));
@@ -85,7 +85,7 @@ void spike_task(void *argv) {
                 printf("%3.1f litres at %s",halflitres/2.0,ctime(&ts));
             }
         }
-        printf("%d %d %d %d %d %d %d %3.1f\n",direction,sdk_system_get_time()/1000,min1x,min2x,min1,min2,min1-min2-OFFSET,halflitres/2.0);
+        printf("%d %d %d %d %d %d %3.1f %d\n",direction,sdk_system_get_time()/1000,min1xx,min2xx,min1,min2,halflitres/2.0,min1-min2-OFFSET);
     }
 }
 
