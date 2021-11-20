@@ -60,7 +60,7 @@ void spike_task(void *argv) {
             sdk_os_delay_us(200); //stabilise the output?
             gpio_write(COIL1_PIN, 1); //disable COIL1
             if (min1>reading1) min1=reading1;
-            sdk_os_delay_us(1800); // 2ms together with stabalizing time
+            vTaskDelay(1); // 10ms
     
             gpio_write(COIL2_PIN, 0); //enable COIL2
             sdk_os_delay_us(20); //stabilise the output?
@@ -69,7 +69,7 @@ void spike_task(void *argv) {
             sdk_os_delay_us(200); //stabilise the output?
             gpio_write(COIL2_PIN, 1); //disable COIL2
             if (min2>reading2) min2=reading2;
-            sdk_os_delay_us(1800); // 2ms together with stabalizing time
+            vTaskDelay(1); // 10ms
         }
         if (direction) {
             if ((min1-min2)>OFFSET+HYSTERESIS) {
