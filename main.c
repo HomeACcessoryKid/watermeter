@@ -23,7 +23,7 @@
 #define  ONES  0xffffffff // 32 bits of value one
 #define  ZEROS 0x00000000 // 32 bits of value zero
 #define  BUFSIZE 16       // must be multiple of 4
-#define  WINDOW  20       // minimum value of # of samples
+#define  WINDOW 100       // minimum value of # of samples
 #define  OFFSET  -8       // how much coil1 is higher than coil2
 #define  HYSTERESIS  15   // to prevent noise to trigger
 uint32_t dma_buf[BUFSIZE];
@@ -32,7 +32,7 @@ time_t ts;
 
 void spike_task(void *argv) {
     int i=0;
-    bool direction=0;
+    bool direction=2;
     uint32_t halflitres=0;
     uint16_t reading1,reading2;
     uint16_t min1,min2;
@@ -60,7 +60,7 @@ void spike_task(void *argv) {
             sdk_os_delay_us(200); //stabilise the output?
             gpio_write(COIL1_PIN, 1); //disable COIL1
             if (min1>reading1) min1=reading1;
-            vTaskDelay(1); // 10ms
+            sdk_os_delay_us(1800); // 2ms together with stabalizing time
     
             gpio_write(COIL2_PIN, 0); //enable COIL2
             sdk_os_delay_us(20); //stabilise the output?
@@ -69,11 +69,11 @@ void spike_task(void *argv) {
             sdk_os_delay_us(200); //stabilise the output?
             gpio_write(COIL2_PIN, 1); //disable COIL2
             if (min2>reading2) min2=reading2;
-            vTaskDelay(1); // 10ms
+            sdk_os_delay_us(1800); // 2ms together with stabalizing time
         }
         if (direction) {
             if ((min1-min2)>OFFSET+HYSTERESIS) {
-                halflitres++;
+                if (direction==1) halflitres++;
                 direction=0;
                 ts = time(NULL);
                 printf("%3.1f litres at %s",halflitres/2.0,ctime(&ts));
