@@ -3,6 +3,7 @@ PROGRAM = main
 EXTRA_COMPONENTS = \
 	extras/timekeeping \
     extras/i2s_dma \
+    extras/paho_mqtt_c \
     $(abspath UDPlogger) \
 
 FLASH_SIZE ?= 8
