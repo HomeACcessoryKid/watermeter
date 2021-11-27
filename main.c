@@ -50,6 +50,7 @@ void spike_task(void *argv) {
     int i=0;
     bool direction=0;
     uint16_t reading,min1,min2,min1x,min2x,min1xx,min2xx,min1xxx,min2xxx; // x is for eXtreme which we will ignore
+    char msg[PUB_MSG_LEN];
     
     //SPIKE_PIN is GPIO3 = RX0 because hardcoded in i2s - remove UART cable from RX0 port!
     i2s_pins_t i2s_pins = {.data = true, .clock = false, .ws = false};
@@ -94,17 +95,21 @@ void spike_task(void *argv) {
         if (direction) {
             if ((min1-min2)>OFFSET+HYSTERESIS) {
                 halflitres++;
-                direction=0;
+                direction=0; i=0;
                 ts = time(NULL);
                 printf("%3.1f litres at %s",halflitres/2.0,ctime(&ts));
             }
         } else {
             if ((min1-min2)<OFFSET-HYSTERESIS) {
                 halflitres++;
-                direction=1;
+                direction=1; i=0;
                 ts = time(NULL);
                 printf("%3.1f litres at %s",halflitres/2.0,ctime(&ts));
             }
+        }
+        if (!i) { // i will be WINDOW if no update
+            snprintf(msg, PUB_MSG_LEN, "{\"idx\":" DMTCZ_idx ",\"nvalue\":0,\"svalue\":\"%.1f\"}", halflitres/2.0);
+            if (xQueueSend(publish_queue, (void *)msg, 0) == pdFALSE) printf("Publish queue overflow.\n");
         }
         printf("%d %d %d %d %d %d %3.1f %d\n",direction,sdk_system_get_time()/1000,min1xx,min2xx,min1,min2,halflitres/2.0,min1-min2-OFFSET);
     }
@@ -129,21 +134,6 @@ void sntp_task(void *argv) {
         printf("TIME: %s", ctime(&ts));
     }
     vTaskDelete(NULL);
-}
-
-static void  beat_task(void *pvParameters)
-{
-    TickType_t xLastWakeTime = xTaskGetTickCount();
-    char msg[PUB_MSG_LEN];
-
-    while (1) {
-        vTaskDelayUntil(&xLastWakeTime, 10000 / portTICK_PERIOD_MS);
-        snprintf(msg, PUB_MSG_LEN, "{\"idx\":" DMTCZ_idx ",\"nvalue\":0,\"svalue\":\"%.1f\"}", halflitres/2.0);
-        printf("beat %s\n",msg);
-        if (xQueueSend(publish_queue, (void *)msg, 0) == pdFALSE) {
-            printf("Publish queue overflow.\n");
-        }
-    }
 }
 
 static const char *  get_my_id(void)
@@ -197,7 +187,7 @@ static void  mqtt_task(void *pvParameters)
         if( ret ){
             printf("error: %d\n", ret);
             vTaskDelay(backoff);
-            if (backoff<BACKOFF1*128/portTICK_PERIOD_MS) backoff*=2; //max out at 12.8 seconds
+            if (backoff<BACKOFF1*128) backoff*=2; //max out at 12.8 seconds
             continue;
         }
         printf("done\n");
@@ -216,7 +206,8 @@ static void  mqtt_task(void *pvParameters)
         if(ret){
             printf("error: %d\n", ret);
             mqtt_network_disconnect(&network);
-            taskYIELD();
+            vTaskDelay(backoff);
+            if (backoff<BACKOFF1*128) backoff*=2; //max out at 12.8 seconds
             continue;
         }
         printf("done\n");
@@ -235,7 +226,7 @@ static void  mqtt_task(void *pvParameters)
                 message.dup = 0;
                 message.qos = MQTT_QOS1;
                 message.retained = 0;
-                ret = mqtt_publish(&client, "/beat", &message);
+                ret = mqtt_publish(&client, "domoticz/in", &message);
                 if (ret != MQTT_SUCCESS ){
                     printf("error while publishing message: %d\n", ret );
                     break;
@@ -301,6 +292,5 @@ void user_init(void) {
     vSemaphoreCreateBinary(wifi_alive);
     publish_queue = xQueueCreate(3, PUB_MSG_LEN);
     xTaskCreate(&wifi_task, "wifi_task",  256, NULL, 1, NULL);
-    xTaskCreate(&beat_task, "beat_task", 256, NULL, 1, NULL);
     xTaskCreate(&mqtt_task, "mqtt_task", 1024, NULL, 2, NULL);
 }
