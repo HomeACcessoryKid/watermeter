@@ -191,6 +191,7 @@ static void  mqtt_task(void *pvParameters)
             continue;
         }
         printf("done\n");
+        backoff = BACKOFF1;
         mqtt_client_new(&client, &network, 5000, mqtt_buf, 100,
                       mqtt_readbuf, 100);
 
@@ -222,7 +223,7 @@ static void  mqtt_task(void *pvParameters)
                 printf("got message to publish\n");
                 mqtt_message_t message;
                 message.payload = msg;
-                message.payloadlen = PUB_MSG_LEN;
+                message.payloadlen = strlen(msg);
                 message.dup = 0;
                 message.qos = MQTT_QOS1;
                 message.retained = 0;
