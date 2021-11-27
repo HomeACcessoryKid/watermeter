@@ -178,6 +178,14 @@ static void  mqtt_task(void *pvParameters)
     strcpy(mqtt_client_id, "ESP-");
     strcat(mqtt_client_id, get_my_id());
 
+    data.willFlag       = 0;
+    data.MQTTVersion    = 3;
+    data.clientID.cstring   = mqtt_client_id;
+    data.username.cstring   = MQTT_USER;
+    data.password.cstring   = MQTT_PASS;
+    data.keepAliveInterval  = 10;
+    data.cleansession   = 0;
+
     while(1) {
         xSemaphoreTake(wifi_alive, portMAX_DELAY);
         printf("%s: started\n", __func__);
@@ -195,13 +203,6 @@ static void  mqtt_task(void *pvParameters)
         mqtt_client_new(&client, &network, 5000, mqtt_buf, 100,
                       mqtt_readbuf, 100);
 
-        data.willFlag       = 0;
-        data.MQTTVersion    = 3;
-        data.clientID.cstring   = mqtt_client_id;
-        data.username.cstring   = MQTT_USER;
-        data.password.cstring   = MQTT_PASS;
-        data.keepAliveInterval  = 10;
-        data.cleansession   = 0;
         printf("Send MQTT connect ... ");
         ret = mqtt_connect(&client, &data);
         if(ret){
