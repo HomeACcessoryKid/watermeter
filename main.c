@@ -20,10 +20,11 @@
  #error You must set VERSION=x.y.z to match github version tag x.y.z
 #endif
 
-#define MQTT_HOST ("192.168.178.31")
+#define MQTT_HOST ("192.168.178.5")
 #define MQTT_PORT 1883
-#define MQTT_USER "local"
-#define MQTT_PASS "localloco"
+#define MQTT_USER "WaterMeter"
+#define MQTT_PASS "testingonly"
+#define DMTCZ_idx "62"
 
 #define  COIL1_PIN 4
 #define  COIL2_PIN 5
@@ -41,12 +42,13 @@ time_t ts;
 
 SemaphoreHandle_t wifi_alive;
 QueueHandle_t publish_queue;
-#define PUB_MSG_LEN 16
+#define PUB_MSG_LEN 48  // suitable for a Domoticz counter update
+
+uint32_t halflitres=0;
 
 void spike_task(void *argv) {
     int i=0;
     bool direction=0;
-    uint32_t halflitres=0;
     uint16_t reading,min1,min2,min1x,min2x,min1xx,min2xx,min1xxx,min2xxx; // x is for eXtreme which we will ignore
     
     //SPIKE_PIN is GPIO3 = RX0 because hardcoded in i2s - remove UART cable from RX0 port!
@@ -133,12 +135,11 @@ static void  beat_task(void *pvParameters)
 {
     TickType_t xLastWakeTime = xTaskGetTickCount();
     char msg[PUB_MSG_LEN];
-    int count = 0;
 
     while (1) {
         vTaskDelayUntil(&xLastWakeTime, 10000 / portTICK_PERIOD_MS);
-        printf("beat\n");
-        snprintf(msg, PUB_MSG_LEN, "Beat %d\n", count++);
+        snprintf(msg, PUB_MSG_LEN, "{\"idx\":" DMTCZ_idx ",\"nvalue\":0,\"svalue\":\"%.1f\"}", halflitres/2.0);
+        printf("beat %s\n",msg);
         if (xQueueSend(publish_queue, (void *)msg, 0) == pdFALSE) {
             printf("Publish queue overflow.\n");
         }
@@ -170,9 +171,11 @@ static const char *  get_my_id(void)
     return my_id;
 }
 
+#define BACKOFF1 100/portTICK_PERIOD_MS
 static void  mqtt_task(void *pvParameters)
 {
     int ret         = 0;
+    int backoff = BACKOFF1;
     struct mqtt_network network;
     mqtt_client_t client   = mqtt_client_default;
     char mqtt_client_id[20];
@@ -193,7 +196,8 @@ static void  mqtt_task(void *pvParameters)
         ret = mqtt_network_connect(&network, MQTT_HOST, MQTT_PORT);
         if( ret ){
             printf("error: %d\n", ret);
-            taskYIELD();
+            vTaskDelay(backoff);
+            if (backoff<BACKOFF1*128/portTICK_PERIOD_MS) backoff*=2; //max out at 12.8 seconds
             continue;
         }
         printf("done\n");
@@ -216,6 +220,7 @@ static void  mqtt_task(void *pvParameters)
             continue;
         }
         printf("done\n");
+        backoff = BACKOFF1;
         xQueueReset(publish_queue);
 
         while(1){
