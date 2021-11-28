@@ -41,14 +41,14 @@ QueueHandle_t publish_queue;
 #define MQTT_PORT  1883
 #define MQTT_topic "domoticz/in"
 char    *mqtthost=NULL, *mqttuser=NULL, *mqttpass=NULL, *dmtczidx=NULL, *counter0=NULL;
-uint32_t litres0;
+uint32_t halflitres,halflitres0;
 
 void spike_task(void *argv) {
     int i=0;
     bool direction=0;
     uint16_t reading,min1,min2,min1x,min2x,min1xx,min2xx,min1xxx,min2xxx; // x is for eXtreme which we will ignore
-    uint32_t halflitres=litres0;
     char msg[PUB_MSG_LEN];
+    halflitres=halflitres0;
     
     //SPIKE_PIN is GPIO3 = RX0 because hardcoded in i2s - remove UART cable from RX0 port!
     i2s_pins_t i2s_pins = {.data = true, .clock = false, .ws = false};
@@ -126,8 +126,16 @@ void sntp_task(void *argv) {
         vTaskDelay(100/portTICK_PERIOD_MS);
     } while (!(ts>1634567890)); //Mon Oct 18 16:38:10 CEST 2021
     printf("TIME SET: %u=%s", (unsigned int) ts, ctime(&ts));
+    uint32_t old_halflitres=0;
     while(1) {
-        printf("user_params: %s %s %s %s %s %d\n",mqtthost,mqttuser,mqttpass,dmtczidx,counter0,litres0);
+        printf("user_params: %s %s %s %s %s %d\n",mqtthost,mqttuser,mqttpass,dmtczidx,counter0,halflitres0);
+        if (old_halflitres==halflitres) {
+            char wm_zero[12]; sprintf(wm_zero,"%u",halflitres);
+            sysparam_set_string("wm_zero",wm_zero);
+            printf("wrote %s\n",wm_zero);
+        } else {
+            old_halflitres=halflitres;
+        }
         vTaskDelay(6000); //60s
         ts = time(NULL);
         printf("TIME: %s", ctime(&ts));
@@ -284,10 +292,10 @@ static void  wifi_task(void *pvParameters)
 
 char error[]="error";
 void ota_string() {
-    sysparam_set_string("ota_string", "192.168.178.5;WaterMeter;testingonly;62;41581"); //debug only
-    char *buff;
-    if (sysparam_get_string("ota_string", &buff) == SYSPARAM_OK) {
-        mqtthost=strtok(buff,";");
+    //sysparam_set_string("ota_string", "192.168.178.5;WaterMeter;testingonly;62;41532"); //can be used if not using LCM
+    char *otas,*wm0;
+    if (sysparam_get_string("ota_string", &otas) == SYSPARAM_OK) {
+        mqtthost=strtok(otas,";");
         mqttuser=strtok(NULL,";");
         mqttpass=strtok(NULL,";");
         dmtczidx=strtok(NULL,";");
@@ -298,7 +306,9 @@ void ota_string() {
     if (mqttpass==NULL) mqttpass=error;
     if (dmtczidx==NULL) dmtczidx=error;
     if (counter0==NULL) counter0=error;
-    litres0=atoi(counter0);
+    halflitres0=2*atof(counter0);
+    if (sysparam_get_string("wm_zero", &wm0) == SYSPARAM_OK) halflitres0=atoi(wm0);
+    //and RTC value if available
 }
 
 void user_init(void) {
