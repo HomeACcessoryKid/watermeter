@@ -174,6 +174,7 @@ static void  mqtt_task(void *pvParameters)
     mqtt_client_t client   = mqtt_client_default;
     char mqtt_client_id[20];
     uint8_t mqtt_readbuf[100];
+    char msg[PUB_MSG_LEN];
 
     mqtt_network_new( &network );
     memset(mqtt_client_id, 0, sizeof(mqtt_client_id));
@@ -220,7 +221,7 @@ static void  mqtt_task(void *pvParameters)
 
         while(1){
 
-            char msg[PUB_MSG_LEN - 1] = "\0";
+            msg[PUB_MSG_LEN - 1] = 0;
             while(xQueueReceive(publish_queue, (void *)msg, 0) == pdTRUE){
                 int i;
                 for (i=0;i<12;i+=2) printf("%02x%02x ",data.clientID.cstring[i],data.clientID.cstring[i+1]); printf("1\n");
