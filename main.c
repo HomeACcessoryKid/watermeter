@@ -15,6 +15,7 @@
 #include <paho_mqtt_c/MQTTESP8266.h>
 #include <paho_mqtt_c/MQTTClient.h>
 #include <semphr.h>
+#include <sysparam.h>
 
 #ifndef VERSION
  #error You must set VERSION=x.y.z to match github version tag x.y.z
@@ -29,7 +30,7 @@
 #define  BUFSIZE 16       // must be multiple of 4
 #define  WINDOW  20       // minimum value of # of samples
 #define  OFFSET -10       // how much coil1 is higher than coil2
-#define  HYSTERESIS  17   // to prevent noise to trigger
+#define  HYSTERESIS  14   // to prevent noise to trigger
 uint32_t dma_buf[BUFSIZE];
 static   dma_descriptor_t dma_block;
 time_t ts;
@@ -37,15 +38,11 @@ time_t ts;
 SemaphoreHandle_t wifi_alive;
 QueueHandle_t publish_queue;
 #define PUB_MSG_LEN 48  // suitable for a Domoticz counter update
+#define MQTT_PORT  1883
+#define MQTT_topic "domoticz/in"
+char   *mqtthost, *mqttuser, *mqttpass, *dmtczidx;
 
 uint32_t halflitres=0;
-
-#define MQTT_PORT  1883
-#define MQTT_HOST  "192.168.178.5"
-#define MQTT_USER  "WaterMeter"
-#define MQTT_PASS  "testingonly"
-#define MQTT_topic "domoticz/in"
-#define DMTCZ_idx  "62"
 
 void spike_task(void *argv) {
     int i=0;
@@ -109,7 +106,7 @@ void spike_task(void *argv) {
             }
         }
         if (!i) { // i will be WINDOW if no update
-            snprintf(msg, PUB_MSG_LEN, "{\"idx\":" DMTCZ_idx ",\"nvalue\":0,\"svalue\":\"%.1f\"}", halflitres/2.0);
+            snprintf(msg, PUB_MSG_LEN, "{\"idx\":%s,\"nvalue\":0,\"svalue\":\"%.1f\"}", dmtczidx, halflitres/2.0);
             if (xQueueSend(publish_queue, (void *)msg, 0) == pdFALSE) printf("Publish queue overflow.\n");
         }
         printf("%d %d %d %d %d %d %3.1f %d\n",direction,sdk_system_get_time()/1000,min1xx,min2xx,min1,min2,halflitres/2.0,min1-min2-OFFSET);
@@ -133,6 +130,7 @@ void sntp_task(void *argv) {
         vTaskDelay(6000); //60s
         ts = time(NULL);
         printf("TIME: %s", ctime(&ts));
+        printf("%s %s %s %s\n",mqtthost,mqttuser,mqttpass,dmtczidx);
     }
     vTaskDelete(NULL);
 }
@@ -170,7 +168,7 @@ static void  mqtt_task(void *pvParameters)
     struct mqtt_network network;
     mqtt_client_t client   = mqtt_client_default;
     char mqtt_client_id[20];
-    uint8_t mqtt_buf[100];  //global variable for debugging only 
+    uint8_t mqtt_buf[100];
     uint8_t mqtt_readbuf[100];
     mqtt_packet_connect_data_t data = mqtt_packet_connect_data_initializer;
     char msg[PUB_MSG_LEN];
@@ -183,8 +181,8 @@ static void  mqtt_task(void *pvParameters)
     data.willFlag       = 0;
     data.MQTTVersion    = 3;
     data.clientID.cstring   = mqtt_client_id;
-    data.username.cstring   = MQTT_USER;
-    data.password.cstring   = MQTT_PASS;
+    data.username.cstring   = mqttuser;
+    data.password.cstring   = mqttpass;
     data.keepAliveInterval  = 10;
     data.cleansession   = 0;
 
@@ -192,8 +190,8 @@ static void  mqtt_task(void *pvParameters)
         xSemaphoreTake(wifi_alive, portMAX_DELAY);
         printf("%s: started\n", __func__);
         printf("%s: (Re)connecting to MQTT server %s ... ",__func__,
-               MQTT_HOST);
-        ret = mqtt_network_connect(&network, MQTT_HOST, MQTT_PORT);
+               mqtthost);
+        ret = mqtt_network_connect(&network, mqtthost, MQTT_PORT);
         if( ret ){
             printf("error: %d\n", ret);
             vTaskDelay(backoff);
@@ -295,5 +293,13 @@ void user_init(void) {
     vSemaphoreCreateBinary(wifi_alive);
     publish_queue = xQueueCreate(3, PUB_MSG_LEN);
     xTaskCreate(&wifi_task, "wifi_task",  256, NULL, 1, NULL);
+
+    sysparam_set_string("ota_string", "192.168.178.5;WaterMeter;testingonly;62"); //debug only
+    char *value;
+    sysparam_status_t status = sysparam_get_string("ota_string", &value);
+    if (status == SYSPARAM_OK) printf("%s\n",value);
+    mqtthost=strtok(value,";"); mqttuser=strtok(NULL,";"); mqttpass=strtok(NULL,";"); dmtczidx=strtok(NULL,";");
+    printf("%s %s %s %s\n",mqtthost,mqttuser,mqttpass,dmtczidx); //TODO: verify NULL values
+
     xTaskCreate(&mqtt_task, "mqtt_task", 1024, NULL, 2, NULL);
 }
