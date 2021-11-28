@@ -40,14 +40,14 @@ QueueHandle_t publish_queue;
 #define PUB_MSG_LEN 48  // suitable for a Domoticz counter update
 #define MQTT_PORT  1883
 #define MQTT_topic "domoticz/in"
-char   *mqtthost, *mqttuser, *mqttpass, *dmtczidx;
-
-uint32_t halflitres=0;
+char    *mqtthost=NULL, *mqttuser=NULL, *mqttpass=NULL, *dmtczidx=NULL, *counter0=NULL;
+uint32_t litres0;
 
 void spike_task(void *argv) {
     int i=0;
     bool direction=0;
     uint16_t reading,min1,min2,min1x,min2x,min1xx,min2xx,min1xxx,min2xxx; // x is for eXtreme which we will ignore
+    uint32_t halflitres=litres0;
     char msg[PUB_MSG_LEN];
     
     //SPIKE_PIN is GPIO3 = RX0 because hardcoded in i2s - remove UART cable from RX0 port!
@@ -127,10 +127,10 @@ void sntp_task(void *argv) {
     } while (!(ts>1634567890)); //Mon Oct 18 16:38:10 CEST 2021
     printf("TIME SET: %u=%s", (unsigned int) ts, ctime(&ts));
     while(1) {
+        printf("user_params: %s %s %s %s %s %d\n",mqtthost,mqttuser,mqttpass,dmtczidx,counter0,litres0);
         vTaskDelay(6000); //60s
         ts = time(NULL);
         printf("TIME: %s", ctime(&ts));
-        printf("%s %s %s %s\n",mqtthost,mqttuser,mqttpass,dmtczidx);
     }
     vTaskDelete(NULL);
 }
@@ -282,10 +282,30 @@ static void  wifi_task(void *pvParameters)
     }
 }
 
+char error[]="error";
+void ota_string() {
+    sysparam_set_string("ota_string", "192.168.178.5;WaterMeter;testingonly;62;41581"); //debug only
+    char *buff;
+    if (sysparam_get_string("ota_string", &buff) == SYSPARAM_OK) {
+        mqtthost=strtok(buff,";");
+        mqttuser=strtok(NULL,";");
+        mqttpass=strtok(NULL,";");
+        dmtczidx=strtok(NULL,";");
+        counter0=strtok(NULL,";");
+    }
+    if (mqtthost==NULL) mqtthost=error;
+    if (mqttuser==NULL) mqttuser=error;
+    if (mqttpass==NULL) mqttpass=error;
+    if (dmtczidx==NULL) dmtczidx=error;
+    if (counter0==NULL) counter0=error;
+    litres0=atoi(counter0);
+}
+
 void user_init(void) {
     uart_set_baud(0, 115200);
     udplog_init(2);
     UDPLUS("\n\n\nWaterMeter " VERSION "\n");
+    ota_string();
     gpio_enable( COIL1_PIN, GPIO_OUTPUT); gpio_write( COIL1_PIN, 1);
     gpio_enable( COIL2_PIN, GPIO_OUTPUT); gpio_write( COIL2_PIN, 1);
     xTaskCreate(spike_task, "Spike", 512, NULL, 3, NULL);
@@ -293,13 +313,5 @@ void user_init(void) {
     vSemaphoreCreateBinary(wifi_alive);
     publish_queue = xQueueCreate(3, PUB_MSG_LEN);
     xTaskCreate(&wifi_task, "wifi_task",  256, NULL, 1, NULL);
-
-    sysparam_set_string("ota_string", "192.168.178.5;WaterMeter;testingonly;62"); //debug only
-    char *value;
-    sysparam_status_t status = sysparam_get_string("ota_string", &value);
-    if (status == SYSPARAM_OK) printf("%s\n",value);
-    mqtthost=strtok(value,";"); mqttuser=strtok(NULL,";"); mqttpass=strtok(NULL,";"); dmtczidx=strtok(NULL,";");
-    printf("%s %s %s %s\n",mqtthost,mqttuser,mqttpass,dmtczidx); //TODO: verify NULL values
-
     xTaskCreate(&mqtt_task, "mqtt_task", 1024, NULL, 2, NULL);
 }
