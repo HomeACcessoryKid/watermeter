@@ -47,6 +47,7 @@ uint32_t halflitres=0;
 #define MQTT_topic "domoticz/in"
 #define DMTCZ_idx  "62"
 uint8_t mqtt_buf[100];  //global variable for debugging only 
+mqtt_packet_connect_data_t data = mqtt_packet_connect_data_initializer;
 
 void spike_task(void *argv) {
     int i=0;
@@ -114,7 +115,8 @@ void spike_task(void *argv) {
             if (xQueueSend(publish_queue, (void *)msg, 0) == pdFALSE) printf("Publish queue overflow.\n");
         }
         printf("%d %d %d %d %d %d %3.1f %d\n",direction,sdk_system_get_time()/1000,min1xx,min2xx,min1,min2,halflitres/2.0,min1-min2-OFFSET);
-        for (i=0;i<32;i+=2) printf("%02x%02x ",mqtt_buf[i],mqtt_buf[i+1]); printf("\n");
+        for (i=0;i<20;i+=2) printf("%02x%02x ",mqtt_buf[i],mqtt_buf[i+1]); printf("| ");
+        for (i=0;i<12;i+=2) printf("%02x%02x ",data.clientID.cstring[i],data.clientID.cstring[i+1]); printf("\n");
     }
 }
 
@@ -173,7 +175,6 @@ static void  mqtt_task(void *pvParameters)
     mqtt_client_t client   = mqtt_client_default;
     char mqtt_client_id[20];
     uint8_t mqtt_readbuf[100];
-    mqtt_packet_connect_data_t data = mqtt_packet_connect_data_initializer;
 
     mqtt_network_new( &network );
     memset(mqtt_client_id, 0, sizeof(mqtt_client_id));
