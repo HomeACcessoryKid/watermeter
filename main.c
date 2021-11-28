@@ -20,12 +20,6 @@
  #error You must set VERSION=x.y.z to match github version tag x.y.z
 #endif
 
-#define MQTT_HOST ("192.168.178.5")
-#define MQTT_PORT 1883
-#define MQTT_USER "WaterMeter"
-#define MQTT_PASS "testingonly"
-#define DMTCZ_idx "62"
-
 #define  COIL1_PIN 4
 #define  COIL2_PIN 5
 //SPIKE_PIN is GPIO3 = RX0 because hardcoded in i2s
@@ -35,7 +29,7 @@
 #define  BUFSIZE 16       // must be multiple of 4
 #define  WINDOW  20       // minimum value of # of samples
 #define  OFFSET -10       // how much coil1 is higher than coil2
-#define  HYSTERESIS  11   // to prevent noise to trigger
+#define  HYSTERESIS  17   // to prevent noise to trigger
 uint32_t dma_buf[BUFSIZE];
 static   dma_descriptor_t dma_block;
 time_t ts;
@@ -45,6 +39,14 @@ QueueHandle_t publish_queue;
 #define PUB_MSG_LEN 48  // suitable for a Domoticz counter update
 
 uint32_t halflitres=0;
+
+#define MQTT_PORT  1883
+#define MQTT_HOST  "192.168.178.5"
+#define MQTT_USER  "WaterMeter"
+#define MQTT_PASS  "testingonly"
+#define MQTT_topic "domoticz/in"
+#define DMTCZ_idx  "62"
+uint8_t mqtt_buf[100];  //global variable for debugging only 
 
 void spike_task(void *argv) {
     int i=0;
@@ -112,6 +114,7 @@ void spike_task(void *argv) {
             if (xQueueSend(publish_queue, (void *)msg, 0) == pdFALSE) printf("Publish queue overflow.\n");
         }
         printf("%d %d %d %d %d %d %3.1f %d\n",direction,sdk_system_get_time()/1000,min1xx,min2xx,min1,min2,halflitres/2.0,min1-min2-OFFSET);
+        for (i=0;i<32;i+=2) printf("%02x%02x ",mqtt_buf[i],mqtt_buf[i+1]); printf("\n");
     }
 }
 
@@ -169,7 +172,6 @@ static void  mqtt_task(void *pvParameters)
     struct mqtt_network network;
     mqtt_client_t client   = mqtt_client_default;
     char mqtt_client_id[20];
-    uint8_t mqtt_buf[100];
     uint8_t mqtt_readbuf[100];
     mqtt_packet_connect_data_t data = mqtt_packet_connect_data_initializer;
 
@@ -228,7 +230,7 @@ static void  mqtt_task(void *pvParameters)
                 message.dup = 0;
                 message.qos = MQTT_QOS1;
                 message.retained = 0;
-                ret = mqtt_publish(&client, "domoticz/in", &message);
+                ret = mqtt_publish(&client, MQTT_topic , &message);
                 if (ret != MQTT_SUCCESS ){
                     printf("error while publishing message: %d\n", ret );
                     break;
