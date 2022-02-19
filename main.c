@@ -11,6 +11,7 @@
 #include "i2s_dma/i2s_dma.h"
 #include <udplogger.h>
 #include <lwip/apps/sntp.h>
+#include <espressif/esp8266/eagle_soc.h>
 #include "mqtt-client.h"
 #include <sysparam.h>
 
@@ -28,18 +29,19 @@
 #define  WINDOW  20       // minimum value of # of samples
 #define  OFFSET -10       // how much coil1 is higher than coil2
 #define  HYSTERESIS  14   // to prevent noise to trigger
+#define  RTC_ADDR    0x600013B0
+#define  RTC_MAGIC   0xdecebeaa
 uint32_t dma_buf[BUFSIZE];
 static   dma_descriptor_t dma_block;
 time_t ts;
 
 char     *dmtczidx=NULL, *counter0=NULL;
-uint32_t halflitres,halflitres0;
+uint32_t halflitres;
+bool     direction=0;
 
 void spike_task(void *argv) {
     int i=0;
-    bool direction=0; //TODO: determine the correct initial state
     uint16_t reading,min1,min2,min1x,min2x,min1xx,min2xx,min1xxx,min2xxx; // x is for eXtreme which we will ignore
-    halflitres=halflitres0;
     
     //SPIKE_PIN is GPIO3 = RX0 because hardcoded in i2s - remove UART cable from RX0 port!
     i2s_pins_t i2s_pins = {.data = true, .clock = false, .ws = false};
@@ -96,6 +98,11 @@ void spike_task(void *argv) {
                 printf("%3.1f litres at %s",halflitres/2.0,ctime(&ts));
             }
         }
+        //save state to RTC memory
+        WRITE_PERI_REG(RTC_ADDR+ 4,halflitres ); //uint32_t
+        WRITE_PERI_REG(RTC_ADDR+ 8,direction  ); //boolean
+        WRITE_PERI_REG(RTC_ADDR   ,RTC_MAGIC  );
+        
         if (!i) { // i will be WINDOW if no update
             i=mqtt_client_publish("{\"idx\":%s,\"nvalue\":0,\"svalue\":\"%.1f\"}", dmtczidx, halflitres/2.0);
             if (i<0) printf("MQTT publish of counter failed because %s\n",MQTT_CLIENT_ERROR(i));
@@ -122,7 +129,6 @@ void sntp_task(void *argv) {
         if (old_halflitres==halflitres) {
             char wm_zero[12]; sprintf(wm_zero,"%u",halflitres);
             sysparam_set_string("wm0",wm_zero); // sysparam does not actually write if value didn't change !
-            printf("wrote %s\n",wm_zero);
         } else {
             old_halflitres=halflitres;
         }
@@ -136,7 +142,7 @@ void sntp_task(void *argv) {
 mqtt_config_t mqttconf=MQTT_DEFAULT_CONFIG;
 char error[]="error";
 void ota_string() {
-    char *otas,*wm0;
+    char *otas;
     if (sysparam_get_string("ota_string", &otas) == SYSPARAM_OK) {
         mqttconf.host=strtok(otas,";");
         mqttconf.user=strtok(NULL,";");
@@ -149,21 +155,31 @@ void ota_string() {
     if (mqttconf.pass==NULL) mqttconf.pass=error;
     if (dmtczidx     ==NULL) dmtczidx     =error;
     if (counter0     ==NULL) counter0     =error;
-    halflitres0=2*atof(counter0);
-    if (sysparam_get_string("wm0", &wm0) == SYSPARAM_OK) halflitres0=atoi(wm0);
-    else if (sysparam_get_string("wm_zero", &wm0) == SYSPARAM_OK) halflitres0=atoi(wm0); //transition only
-    //and RTC value if available
+}
+
+void device_init() {
+    //sysparam_set_string("ota_string", "192.168.178.5;WaterMeter;testingonly;62;41532"); //can be used if not using LCM
+    ota_string();
+    char *wm0;
+    halflitres=2*atof(counter0);
+    if (sysparam_get_string("wm0", &wm0) == SYSPARAM_OK) halflitres=atoi(wm0);
+	if (READ_PERI_REG(RTC_ADDR)==RTC_MAGIC) {
+	    halflitres=READ_PERI_REG(RTC_ADDR+ 4);
+        direction =READ_PERI_REG(RTC_ADDR+ 8);
+    }
+    mqtt_client_init(&mqttconf);
+    int i=mqtt_client_publish("{\"idx\":%s,\"nvalue\":0,\"svalue\":\"%.1f\"}", dmtczidx, halflitres/2.0);
+    if (i<0) printf("MQTT publish of counter failed because %s\n",MQTT_CLIENT_ERROR(i));
+    
+    gpio_enable( COIL1_PIN, GPIO_OUTPUT); gpio_write( COIL1_PIN, 1);
+    gpio_enable( COIL2_PIN, GPIO_OUTPUT); gpio_write( COIL2_PIN, 1);
 }
 
 void user_init(void) {
     uart_set_baud(0, 115200);
     udplog_init(2);
     UDPLUS("\n\n\nWaterMeter " VERSION "\n");
-    //sysparam_set_string("ota_string", "192.168.178.5;WaterMeter;testingonly;62;41532"); //can be used if not using LCM
-    ota_string();
-    mqtt_client_init(&mqttconf);
-    gpio_enable( COIL1_PIN, GPIO_OUTPUT); gpio_write( COIL1_PIN, 1);
-    gpio_enable( COIL2_PIN, GPIO_OUTPUT); gpio_write( COIL2_PIN, 1);
+    device_init();
     xTaskCreate(spike_task, "Spike", 512, NULL, 3, NULL);
     xTaskCreate( sntp_task, "SNTP" , 512, NULL, 1, NULL);
 }
