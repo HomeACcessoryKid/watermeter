@@ -14,9 +14,14 @@
 #include <espressif/esp8266/eagle_soc.h>
 #include "mqtt-client.h"
 #include <sysparam.h>
+#include <adv_button.h>
+#include <rboot-api.h>
 
 #ifndef VERSION
  #error You must set VERSION=x.y.z to match github version tag x.y.z
+#endif
+#ifndef BUTTON_PIN
+#error  BUTTON_PIN is not specified
 #endif
 
 #define  COIL1_PIN 4
@@ -157,6 +162,20 @@ void ota_string() {
     if (counter0     ==NULL) counter0     =error;
 }
 
+void singlepress_callback(uint8_t gpio, void *args) {
+    printf("single press = add 0.5 litres\n");
+}
+
+void doublepress_callback(uint8_t gpio, void *args) {
+    printf("double press = remove 0.5 litres\n");
+}
+
+void longpress_callback(uint8_t gpio, void *args) {
+    printf("long press = ota-update in 5 seconds\n");
+    rboot_set_temp_rom(1); //select the OTA main routine
+    sdk_system_restart();  //#include <rboot-api.h>
+}
+
 void device_init() {
     //sysparam_set_string("ota_string", "192.168.178.5;WaterMeter;testingonly;62;41532"); //can be used if not using LCM
     ota_string();
@@ -173,6 +192,12 @@ void device_init() {
     
     gpio_enable( COIL1_PIN, GPIO_OUTPUT); gpio_write( COIL1_PIN, 1);
     gpio_enable( COIL2_PIN, GPIO_OUTPUT); gpio_write( COIL2_PIN, 1);
+
+    adv_button_set_evaluate_delay(10);
+    adv_button_create(BUTTON_PIN, true, false);
+    adv_button_register_callback_fn(BUTTON_PIN, singlepress_callback, 1, NULL);
+    adv_button_register_callback_fn(BUTTON_PIN, doublepress_callback, 2, NULL);
+    adv_button_register_callback_fn(BUTTON_PIN, longpress_callback, 3, NULL);
 }
 
 void user_init(void) {
