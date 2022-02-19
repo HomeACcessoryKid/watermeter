@@ -24,6 +24,10 @@
 #error  BUTTON_PIN is not specified
 #endif
 
+#define PUBLISH do {int n=mqtt_client_publish("{\"idx\":%s,\"nvalue\":0,\"svalue\":\"%.1f\"}", dmtczidx, halflitres/2.0); \
+                    if (n<0) printf("MQTT publish of counter failed because %s\n",MQTT_CLIENT_ERROR(n)); \
+                   }while(0)
+
 #define  COIL1_PIN 4
 #define  COIL2_PIN 5
 //SPIKE_PIN is GPIO3 = RX0 because hardcoded in i2s
@@ -109,8 +113,7 @@ void spike_task(void *argv) {
         WRITE_PERI_REG(RTC_ADDR   ,RTC_MAGIC  );
         
         if (!i) { // i will be WINDOW if no update
-            i=mqtt_client_publish("{\"idx\":%s,\"nvalue\":0,\"svalue\":\"%.1f\"}", dmtczidx, halflitres/2.0);
-            if (i<0) printf("MQTT publish of counter failed because %s\n",MQTT_CLIENT_ERROR(i));
+            PUBLISH;
         }
         printf("%d %d %d %d %d %d %3.1f %d\n",direction,sdk_system_get_time()/1000,min1xx,min2xx,min1,min2,halflitres/2.0,min1-min2-OFFSET);
     }
@@ -163,11 +166,15 @@ void ota_string() {
 }
 
 void singlepress_callback(uint8_t gpio, void *args) {
-    printf("single press = add 0.5 litres\n");
+    halflitres++;
+    PUBLISH;
+    printf("single press = add 0.5 litres, now %.1f\n",halflitres/2.0);
 }
 
 void doublepress_callback(uint8_t gpio, void *args) {
-    printf("double press = remove 0.5 litres\n");
+    halflitres--;
+    PUBLISH;
+    printf("double press = remove 0.5 litres, now %.1f\n",halflitres/2.0);
 }
 
 void longpress_callback(uint8_t gpio, void *args) {
@@ -187,8 +194,7 @@ void device_init() {
         direction =READ_PERI_REG(RTC_ADDR+ 8);
     }
     mqtt_client_init(&mqttconf);
-    int i=mqtt_client_publish("{\"idx\":%s,\"nvalue\":0,\"svalue\":\"%.1f\"}", dmtczidx, halflitres/2.0);
-    if (i<0) printf("MQTT publish of counter failed because %s\n",MQTT_CLIENT_ERROR(i));
+    PUBLISH;
     
     gpio_enable( COIL1_PIN, GPIO_OUTPUT); gpio_write( COIL1_PIN, 1);
     gpio_enable( COIL2_PIN, GPIO_OUTPUT); gpio_write( COIL2_PIN, 1);
